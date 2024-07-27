@@ -32,6 +32,9 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+      - name: List contents of playwright-report
+        run: |
+          ls -R playwright-report
       - name: Upload to S3 bucket
         id: S3
         if: always()
