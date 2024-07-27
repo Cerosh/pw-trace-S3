@@ -1,27 +1,53 @@
 name: Playwright Tests
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
+permissions:
+  id-token: write
+  contents: read
 jobs:
   test:
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: lts/*
-    - name: Install dependencies
-      run: npm ci
-    - name: Install Playwright Browsers
-      run: npx playwright install --with-deps
-    - name: Run Playwright tests
-      run: npx playwright test
-    - uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: playwright-report
-        path: playwright-report/
-        retention-days: 30
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+      - name: Run Playwright tests
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        if: always()
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Upload to S3 bucket
+        id: S3
+        if: always()
+        env:
+          REPORT_DIR: playwright-report-${{ github.run_id }}
+        run: |
+          echo "REPORT_DIR=$REPORT_DIR" >> $GITHUB_ENV
+          aws s3 cp playwright-report/. s3://${{ vars.AWS_S3_BUCKET }}/$REPORT_DIR --recursive
+      - name: Create URL file
+        if: always()
+        run: |
+          REPORT_URL="https://${{ vars.AWS_S3_BUCKET }}.s3.${{ vars.AWS_REGION }}.amazonaws.com/${{ env.REPORT_DIR }}/index.html"
+          echo $REPORT_URL > url.txt
+          echo "Report URL: $REPORT_URL"
+      - name: Setup Job Summary
+        if: always()
+        run: |
+          REPORT_URL="https://${{ vars.AWS_S3_BUCKET }}.s3.${{ vars.AWS_REGION }}.amazonaws.com/${{ env.REPORT_DIR }}/index.html"
+          echo " 🔗 [View Playwright Report]($REPORT_URL)" >> $GITHUB_STEP_SUMMARY
